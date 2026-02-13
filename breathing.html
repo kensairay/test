@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>呼吸練習引導</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+  :root{
+    --bg:#0b1120;
+    --card:rgba(255,255,255,.04);
+    --border:rgba(255,255,255,.08);
+    --text:#c5cdd8;
+    --text-dim:#6b7a8d;
+    --accent:#5eadf2;
+    --inhale:#6ee7b7;
+    --hold:#facc15;
+    --exhale:#a78bfa;
+    --glow-inhale:rgba(110,231,183,.25);
+    --glow-hold:rgba(250,204,21,.2);
+    --glow-exhale:rgba(167,139,250,.25);
+  }
+
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+
+  /* ── ambient background particles ── */
+  .ambient{position:fixed;inset:0;pointer-events:none;z-index:0}
+  .ambient span{
+    position:absolute;border-radius:50%;opacity:.12;
+    animation:float linear infinite;
+  }
+  @keyframes float{
+    0%{transform:translateY(100vh) scale(0)}
+    50%{opacity:.18}
+    100%{transform:translateY(-10vh) scale(1);opacity:0}
+  }
+
+  /* ── container ── */
+  .app{
+    position:relative;z-index:1;
+    width:100%;max-width:460px;
+    padding:2rem 1.5rem;
+    display:flex;flex-direction:column;align-items:center;gap:2rem;
+  }
+
+  h1{
+    font-size:1.5rem;font-weight:600;letter-spacing:.04em;
+    background:linear-gradient(135deg,var(--inhale),var(--accent),var(--exhale));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  }
+
+  /* ── settings panel ── */
+  .settings{
+    width:100%;
+    background:var(--card);border:1px solid var(--border);
+    border-radius:1rem;padding:1.5rem;
+    display:grid;grid-template-columns:1fr 1fr;gap:1rem;
+    backdrop-filter:blur(12px);
+  }
+  .settings.hidden{display:none}
+
+  .field{display:flex;flex-direction:column;gap:.35rem}
+  .field label{font-size:.78rem;color:var(--text-dim);letter-spacing:.03em}
+  .field input{
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    border-radius:.5rem;padding:.55rem .75rem;
+    color:#fff;font-size:1rem;text-align:center;
+    outline:none;transition:border .2s;
+  }
+  .field input:focus{border-color:var(--accent)}
+
+  .preset-row{
+    grid-column:1/-1;display:flex;gap:.5rem;flex-wrap:wrap;
+    justify-content:center;margin-bottom:.25rem;
+  }
+  .preset{
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    border-radius:2rem;padding:.35rem .85rem;
+    color:var(--text-dim);font-size:.75rem;cursor:pointer;
+    transition:all .2s;
+  }
+  .preset:hover{border-color:var(--accent);color:var(--accent)}
+
+  .btn-start{
+    grid-column:1/-1;
+    background:linear-gradient(135deg,var(--inhale),var(--accent));
+    border:none;border-radius:.65rem;padding:.75rem;
+    color:#0b1120;font-size:1rem;font-weight:600;
+    cursor:pointer;transition:opacity .2s;
+    letter-spacing:.03em;
+  }
+  .btn-start:hover{opacity:.88}
+  .btn-start:disabled{opacity:.4;cursor:not-allowed}
+
+  /* ── exercise view ── */
+  .exercise{
+    display:none;flex-direction:column;align-items:center;gap:1.5rem;
+    width:100%;
+  }
+  .exercise.active{display:flex}
+
+  /* circle */
+  .circle-wrapper{
+    position:relative;width:260px;height:260px;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  .glow{
+    position:absolute;border-radius:50%;
+    width:100%;height:100%;
+    filter:blur(40px);opacity:0;
+    transition:opacity .8s,background .8s;
+    pointer-events:none;
+  }
+
+  .ring{
+    position:absolute;
+    width:100%;height:100%;
+    border-radius:50%;
+    border:2px solid rgba(255,255,255,.08);
+  }
+
+  .breath-circle{
+    width:80px;height:80px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,rgba(255,255,255,.25),transparent 60%),
+               var(--inhale);
+    transition:background 1s;
+    /* scale animated via JS */
+  }
+
+  .phase-label{
+    position:absolute;bottom:-2rem;
+    font-size:1.1rem;font-weight:500;letter-spacing:.06em;
+    transition:color .4s;
+  }
+
+  /* timer + info */
+  .info-bar{
+    display:flex;align-items:center;gap:1.5rem;
+    font-size:.85rem;color:var(--text-dim);
+  }
+  .info-bar span strong{color:var(--text)}
+
+  .countdown{
+    font-size:3rem;font-weight:300;
+    font-variant-numeric:tabular-nums;
+    min-width:3ch;text-align:center;
+    color:#fff;
+  }
+
+  /* progress bar */
+  .progress-track{
+    width:100%;height:4px;border-radius:2px;
+    background:rgba(255,255,255,.06);
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;width:0%;border-radius:2px;
+    background:var(--accent);
+    transition:width .3s linear;
+  }
+
+  /* controls */
+  .controls{display:flex;gap:.75rem}
+  .btn-ctrl{
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    border-radius:.55rem;padding:.55rem 1.4rem;
+    color:var(--text);font-size:.88rem;cursor:pointer;
+    transition:all .2s;
+  }
+  .btn-ctrl:hover{border-color:var(--accent);color:#fff}
+  .btn-ctrl.primary{
+    background:linear-gradient(135deg,var(--inhale),var(--accent));
+    border:none;color:#0b1120;font-weight:600;
+  }
+
+  /* completion */
+  .complete-msg{
+    display:none;flex-direction:column;align-items:center;gap:1rem;
+    text-align:center;
+  }
+  .complete-msg.active{display:flex}
+  .complete-msg h2{
+    font-size:1.4rem;font-weight:500;
+    background:linear-gradient(135deg,var(--inhale),var(--exhale));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .complete-msg p{color:var(--text-dim);font-size:.9rem;line-height:1.6}
+
+  /* responsive */
+  @media(max-width:480px){
+    .app{padding:1.5rem 1rem}
+    .circle-wrapper{width:220px;height:220px}
+    .settings{padding:1.2rem}
+  }
+</style>
+</head>
+<body>
+
+<!-- ambient particles -->
+<div class="ambient" id="ambient"></div>
+
+<div class="app">
+  <h1>呼吸練習引導</h1>
+
+  <!-- ── Settings ── -->
+  <div class="settings" id="settings">
+    <div class="preset-row">
+      <button class="preset" data-i="4" data-h="4" data-e="4" data-c="6">Box 4-4-4 x6</button>
+      <button class="preset" data-i="4" data-h="7" data-e="8" data-c="4">4-7-8 放鬆 x4</button>
+      <button class="preset" data-i="5" data-h="0" data-e="5" data-c="8">等長呼吸 x8</button>
+    </div>
+
+    <div class="field">
+      <label>吸氣秒數</label>
+      <input type="number" id="inhaleTime" value="4" min="1" max="30">
+    </div>
+    <div class="field">
+      <label>閉氣秒數</label>
+      <input type="number" id="holdTime" value="4" min="0" max="30">
+    </div>
+    <div class="field">
+      <label>吐氣秒數</label>
+      <input type="number" id="exhaleTime" value="4" min="1" max="30">
+    </div>
+    <div class="field">
+      <label>循環次數</label>
+      <input type="number" id="cycles" value="6" min="1" max="99">
+    </div>
+
+    <button class="btn-start" id="btnStart">開始練習</button>
+  </div>
+
+  <!-- ── Exercise ── -->
+  <div class="exercise" id="exercise">
+    <div class="circle-wrapper">
+      <div class="glow" id="glow"></div>
+      <div class="ring"></div>
+      <div class="breath-circle" id="circle"></div>
+      <div class="phase-label" id="phaseLabel">準備中...</div>
+    </div>
+
+    <div class="countdown" id="countdown">&nbsp;</div>
+
+    <div class="info-bar">
+      <span>循環 <strong id="curCycle">1</strong> / <strong id="totalCycles">6</strong></span>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn-ctrl" id="btnPause">暫停</button>
+      <button class="btn-ctrl" id="btnStop">結束</button>
+    </div>
+  </div>
+
+  <!-- ── Complete ── -->
+  <div class="complete-msg" id="completeMsg">
+    <h2>練習完成</h2>
+    <p id="summary"></p>
+    <button class="btn-ctrl primary" id="btnRestart">再來一次</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ── DOM refs ──
+  const $settings    = document.getElementById('settings');
+  const $exercise    = document.getElementById('exercise');
+  const $completeMsg = document.getElementById('completeMsg');
+  const $circle      = document.getElementById('circle');
+  const $glow        = document.getElementById('glow');
+  const $phaseLabel  = document.getElementById('phaseLabel');
+  const $countdown   = document.getElementById('countdown');
+  const $curCycle    = document.getElementById('curCycle');
+  const $totalCycles = document.getElementById('totalCycles');
+  const $progressFill= document.getElementById('progressFill');
+  const $summary     = document.getElementById('summary');
+
+  const $inhale  = document.getElementById('inhaleTime');
+  const $hold    = document.getElementById('holdTime');
+  const $exhale  = document.getElementById('exhaleTime');
+  const $cycles  = document.getElementById('cycles');
+
+  // ── Ambient particles ──
+  const ambient = document.getElementById('ambient');
+  for (let i = 0; i < 18; i++) {
+    const s = document.createElement('span');
+    const size = Math.random() * 120 + 30;
+    s.style.width = s.style.height = size + 'px';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.background = ['var(--inhale)','var(--hold)','var(--exhale)','var(--accent)'][i % 4];
+    s.style.animationDuration = (Math.random() * 12 + 10) + 's';
+    s.style.animationDelay = (Math.random() * -20) + 's';
+    ambient.appendChild(s);
+  }
+
+  // ── Presets ──
+  document.querySelectorAll('.preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $inhale.value = btn.dataset.i;
+      $hold.value   = btn.dataset.h;
+      $exhale.value = btn.dataset.e;
+      $cycles.value = btn.dataset.c;
+    });
+  });
+
+  // ── State ──
+  let running = false;
+  let paused  = false;
+  let stopRequested = false;
+  let animFrame = null;
+
+  // ── Helpers ──
+  const phaseConfig = {
+    inhale: { label: '吸氣', color: 'var(--inhale)', glow: 'var(--glow-inhale)' },
+    hold:   { label: '閉氣', color: 'var(--hold)',   glow: 'var(--glow-hold)' },
+    exhale: { label: '吐氣', color: 'var(--exhale)', glow: 'var(--glow-exhale)' },
+  };
+
+  function setPhaseVisual(phase, progress) {
+    const cfg = phaseConfig[phase];
+    $phaseLabel.textContent = cfg.label;
+    $phaseLabel.style.color = cfg.color;
+    $glow.style.background  = cfg.glow;
+    $glow.style.opacity     = '1';
+    $circle.style.background =
+      `radial-gradient(circle at 35% 35%, rgba(255,255,255,.25), transparent 60%), ${cfg.color}`;
+
+    let scale;
+    if (phase === 'inhale') {
+      // 0.6 → 1.8
+      scale = 0.6 + 1.2 * progress;
+    } else if (phase === 'hold') {
+      scale = 1.8;
+    } else {
+      // 1.8 → 0.6
+      scale = 1.8 - 1.2 * progress;
+    }
+    $circle.style.transform = `scale(${scale})`;
+    $glow.style.transform   = `scale(${scale * 0.7})`;
+  }
+
+  // ── Core loop using requestAnimationFrame ──
+  function sleep(ms) {
+    return new Promise(resolve => {
+      const start = performance.now();
+      function tick() {
+        if (stopRequested) { resolve(); return; }
+        if (paused) { animFrame = requestAnimationFrame(tick); return; }
+        if (performance.now() - start >= ms) { resolve(); return; }
+        animFrame = requestAnimationFrame(tick);
+      }
+      animFrame = requestAnimationFrame(tick);
+    });
+  }
+
+  function runPhase(phase, durationSec) {
+    return new Promise(resolve => {
+      if (durationSec <= 0 || stopRequested) { resolve(); return; }
+      const durationMs = durationSec * 1000;
+      let elapsed = 0;
+      let lastTime = performance.now();
+
+      function tick(now) {
+        if (stopRequested) { resolve(); return; }
+        if (paused) { lastTime = now; animFrame = requestAnimationFrame(tick); return; }
+
+        const dt = now - lastTime;
+        lastTime = now;
+        elapsed += dt;
+
+        const progress = Math.min(elapsed / durationMs, 1);
+        setPhaseVisual(phase, progress);
+
+        const remaining = Math.ceil((durationMs - elapsed) / 1000);
+        $countdown.textContent = remaining > 0 ? remaining : '';
+
+        if (elapsed >= durationMs) { resolve(); return; }
+        animFrame = requestAnimationFrame(tick);
+      }
+      animFrame = requestAnimationFrame(tick);
+    });
+  }
+
+  async function startExercise() {
+    const inhaleS = Math.max(1, parseInt($inhale.value) || 4);
+    const holdS   = Math.max(0, parseInt($hold.value)   || 0);
+    const exhaleS = Math.max(1, parseInt($exhale.value)  || 4);
+    const totalC  = Math.max(1, parseInt($cycles.value)  || 6);
+
+    running = true; paused = false; stopRequested = false;
+
+    $settings.classList.add('hidden');
+    $exercise.classList.add('active');
+    $completeMsg.classList.remove('active');
+    $totalCycles.textContent = totalC;
+    document.getElementById('btnPause').textContent = '暫停';
+
+    const totalSeconds = (inhaleS + holdS + exhaleS) * totalC;
+    let doneSeconds = 0;
+
+    // countdown 3-2-1
+    $phaseLabel.textContent = '準備';
+    $phaseLabel.style.color = 'var(--text)';
+    $circle.style.transform = 'scale(0.6)';
+    $glow.style.opacity = '0';
+    for (let i = 3; i >= 1; i--) {
+      if (stopRequested) break;
+      $countdown.textContent = i;
+      await sleep(1000);
+    }
+
+    for (let c = 1; c <= totalC; c++) {
+      if (stopRequested) break;
+      $curCycle.textContent = c;
+
+      // inhale
+      await runPhase('inhale', inhaleS);
+      doneSeconds += inhaleS;
+      $progressFill.style.width = (doneSeconds / totalSeconds * 100) + '%';
+      if (stopRequested) break;
+
+      // hold
+      if (holdS > 0) {
+        await runPhase('hold', holdS);
+        doneSeconds += holdS;
+        $progressFill.style.width = (doneSeconds / totalSeconds * 100) + '%';
+        if (stopRequested) break;
+      }
+
+      // exhale
+      await runPhase('exhale', exhaleS);
+      doneSeconds += exhaleS;
+      $progressFill.style.width = (doneSeconds / totalSeconds * 100) + '%';
+    }
+
+    running = false;
+
+    if (!stopRequested) {
+      // complete
+      $exercise.classList.remove('active');
+      $completeMsg.classList.add('active');
+      const mins = Math.floor(totalSeconds / 60);
+      const secs = totalSeconds % 60;
+      const timeStr = mins > 0 ? `${mins} 分 ${secs} 秒` : `${secs} 秒`;
+      $summary.innerHTML =
+        `完成 <strong>${totalC}</strong> 個循環（${inhaleS}-${holdS}-${exhaleS}）<br>` +
+        `總計練習時間：${timeStr}<br><br>持續練習，讓身心更加平靜。`;
+    }
+  }
+
+  function stopExercise() {
+    stopRequested = true;
+    if (animFrame) cancelAnimationFrame(animFrame);
+    running = false; paused = false;
+    $exercise.classList.remove('active');
+    $completeMsg.classList.remove('active');
+    $settings.classList.remove('hidden');
+    $progressFill.style.width = '0%';
+    $circle.style.transform = 'scale(1)';
+    $glow.style.opacity = '0';
+  }
+
+  // ── Event listeners ──
+  document.getElementById('btnStart').addEventListener('click', () => {
+    if (!running) startExercise();
+  });
+
+  document.getElementById('btnPause').addEventListener('click', () => {
+    paused = !paused;
+    document.getElementById('btnPause').textContent = paused ? '繼續' : '暫停';
+  });
+
+  document.getElementById('btnStop').addEventListener('click', stopExercise);
+
+  document.getElementById('btnRestart').addEventListener('click', () => {
+    $completeMsg.classList.remove('active');
+    $settings.classList.remove('hidden');
+    $progressFill.style.width = '0%';
+  });
+})();
+</script>
+</body>
+</html>
